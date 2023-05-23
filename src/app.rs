@@ -53,13 +53,19 @@ impl Sandbox for App {
                     // if have, set the image directory path
                     // xx/xx/xx.md -> xx/xx/xx
                     if self.image_dir_path.is_none() {
-                        let image_dir_path_string =
-                            file_path.to_str().unwrap().to_string().replace(".md", "");
-                        let image_dir_path = Path::new(&image_dir_path_string);
-                        if image_dir_path.exists() && image_dir_path.is_dir() {
-                            self.image_dir_path =
-                                Some(image_dir_path.to_str().unwrap().to_string());
-                            self.fresh_images()
+                        let file_path_string = file_path.to_str().unwrap().to_string().replace(".md", "");
+                        let image_dir_path_strings = vec![
+                            file_path_string.clone(),
+                            file_path_string + ".assets",
+                        ];
+                        for image_dir_path_string in image_dir_path_strings {
+                            let image_dir_path = Path::new(&image_dir_path_string);
+                            if image_dir_path.exists() && image_dir_path.is_dir() {
+                                self.image_dir_path =
+                                    Some(image_dir_path.to_str().unwrap().to_string());
+                                self.fresh_images();
+                                break;
+                            }
                         }
                     }
                 }
@@ -127,9 +133,9 @@ impl Sandbox for App {
             .width(Length::Fill),
             button(text("Select Md File")).on_press(Message::SelectMdFile),
         ]
-        .spacing(10)
-        .width(Length::Fill)
-        .padding([0, 0, 10, 0]);
+            .spacing(10)
+            .width(Length::Fill)
+            .padding([0, 0, 10, 0]);
         let image_dir_path_label = text("Image Directory Path:");
         let image_dir_path_select = row![
             text_input(
@@ -139,9 +145,9 @@ impl Sandbox for App {
             .width(Length::Fill),
             button(text("Select Image Directory")).on_press(Message::SelectImageDir),
         ]
-        .spacing(10)
-        .width(Length::Fill)
-        .padding([0, 0, 10, 0]);
+            .spacing(10)
+            .width(Length::Fill)
+            .padding([0, 0, 10, 0]);
         let images_label = text("Images:");
         let images = scrollable(
             column(
@@ -156,16 +162,16 @@ impl Sandbox for App {
                     })
                     .collect(),
             )
-            .width(Length::Fill),
+                .width(Length::Fill),
         )
-        .height(200);
+            .height(200);
         let buttons = row![
             button(text("Fresh Images")).on_press(Message::FreshImages),
             button(text("Remove Images")).on_press(Message::RemoveImages),
         ]
-        .spacing(20)
-        .width(Length::Fill)
-        .padding([10, 0, 0, 0]);
+            .spacing(20)
+            .width(Length::Fill)
+            .padding([10, 0, 0, 0]);
 
         column![
             file_path_label,
@@ -176,10 +182,10 @@ impl Sandbox for App {
             images,
             buttons,
         ]
-        .padding(10)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+            .padding(10)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
 
