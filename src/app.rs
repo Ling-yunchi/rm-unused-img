@@ -53,11 +53,10 @@ impl Sandbox for App {
                     // if have, set the image directory path
                     // xx/xx/xx.md -> xx/xx/xx
                     if self.image_dir_path.is_none() {
-                        let file_path_string = file_path.to_str().unwrap().to_string().replace(".md", "");
-                        let image_dir_path_strings = vec![
-                            file_path_string.clone(),
-                            file_path_string + ".assets",
-                        ];
+                        let file_path_string =
+                            file_path.to_str().unwrap().to_string().replace(".md", "");
+                        let image_dir_path_strings =
+                            vec![file_path_string.clone(), file_path_string + ".assets"];
                         for image_dir_path_string in image_dir_path_strings {
                             let image_dir_path = Path::new(&image_dir_path_string);
                             if image_dir_path.exists() && image_dir_path.is_dir() {
@@ -94,12 +93,20 @@ impl Sandbox for App {
                         .show();
                     return;
                 }
+                let remove_images_string = if remove_images.len() > 10 {
+                    remove_images[0..5].join("\n")
+                        + "\n...\n"
+                        + remove_images[remove_images.len() - 5..].join("\n").as_str()
+                } else {
+                    remove_images.join("\n")
+                };
                 if MessageDialog::new()
                     .set_title("Remove Images")
-                    .set_description(
-                        &*("Are you sure to remove these images?\n\n".to_string()
-                            + remove_images.join("\n").as_str()),
-                    )
+                    .set_description(&*format!(
+                        "Are you sure to remove these {} images?\n\n{}",
+                        remove_images.len(),
+                        remove_images_string
+                    ))
                     .set_level(rfd::MessageLevel::Warning)
                     .set_buttons(rfd::MessageButtons::YesNo)
                     .show()
@@ -110,9 +117,9 @@ impl Sandbox for App {
                     MessageDialog::new()
                         .set_title("Remove Images")
                         .set_description(&*format!(
-                            "{}\n\n{}",
-                            "Remove images successfully!",
-                            remove_images.join("\n")
+                            "Remove {} images successfully!\n\n{}",
+                            remove_images.len(),
+                            remove_images_string
                         ))
                         .set_level(rfd::MessageLevel::Info)
                         .set_buttons(rfd::MessageButtons::Ok)
@@ -198,14 +205,16 @@ impl App {
     pub fn find_md_images(md_path: &str) -> Vec<String> {
         let file = std::fs::read_to_string(md_path).unwrap();
         let mut images = vec![];
-        let re = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
-        for cap in re.captures_iter(&file) {
+        let md_format = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
+        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'\s>]+)[^>]*>"#).unwrap();
+        for cap in md_format.captures_iter(&file).chain(html_format.captures_iter(&file)) {
             let absolute_path = Path::new(md_path)
                 .parent()
                 .unwrap()
                 .join(cap[1].to_string().replace("/", "\\"));
             images.push(absolute_path.to_str().unwrap().to_string());
         }
+
         images
     }
 
@@ -261,12 +270,20 @@ impl App {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_find_images() {
-        let images =
-            super::App::find_md_images("E:\\study_file\\课程相关\\移动开发技术\\移动开发技术.md");
-        println!("{:?}", images);
-        let images =
-            super::App::find_dir_images("E:\\study_file\\课程相关\\移动开发技术\\移动开发技术");
-        println!("{:?}", images);
+    fn test_regex_images() {
+        let md_format = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
+        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'\s>]+)[^>]*>"#).unwrap();
+        let text =
+r#"
+# Test Regex Images
+![image](./image.png)
+<img src="./image.png" />
+"#;
+        for cap in md_format.captures_iter(text) {
+            println!("{}", &cap[1]);
+        }
+        for cap in html_format.captures_iter(text) {
+            println!("{}", &cap[1]);
+        }
     }
 }
