@@ -52,19 +52,17 @@ impl Sandbox for App {
                     // find if the same directory have a same name image directory
                     // if have, set the image directory path
                     // xx/xx/xx.md -> xx/xx/xx
-                    if self.image_dir_path.is_none() {
-                        let file_path_string =
-                            file_path.to_str().unwrap().to_string().replace(".md", "");
-                        let image_dir_path_strings =
-                            vec![file_path_string.clone(), file_path_string + ".assets"];
-                        for image_dir_path_string in image_dir_path_strings {
-                            let image_dir_path = Path::new(&image_dir_path_string);
-                            if image_dir_path.exists() && image_dir_path.is_dir() {
-                                self.image_dir_path =
-                                    Some(image_dir_path.to_str().unwrap().to_string());
-                                self.fresh_images();
-                                break;
-                            }
+                    let file_path_string =
+                        file_path.to_str().unwrap().to_string().replace(".md", "");
+                    let image_dir_path_strings =
+                        vec![file_path_string.clone(), file_path_string + ".assets"];
+                    for image_dir_path_string in image_dir_path_strings {
+                        let image_dir_path = Path::new(&image_dir_path_string);
+                        if image_dir_path.exists() && image_dir_path.is_dir() {
+                            self.image_dir_path =
+                                Some(image_dir_path.to_str().unwrap().to_string());
+                            self.fresh_images();
+                            break;
                         }
                     }
                 }
@@ -140,9 +138,9 @@ impl Sandbox for App {
             .width(Length::Fill),
             button(text("Select Md File")).on_press(Message::SelectMdFile),
         ]
-            .spacing(10)
-            .width(Length::Fill)
-            .padding([0, 0, 10, 0]);
+        .spacing(10)
+        .width(Length::Fill)
+        .padding([0, 0, 10, 0]);
         let image_dir_path_label = text("Image Directory Path:");
         let image_dir_path_select = row![
             text_input(
@@ -152,9 +150,9 @@ impl Sandbox for App {
             .width(Length::Fill),
             button(text("Select Image Directory")).on_press(Message::SelectImageDir),
         ]
-            .spacing(10)
-            .width(Length::Fill)
-            .padding([0, 0, 10, 0]);
+        .spacing(10)
+        .width(Length::Fill)
+        .padding([0, 0, 10, 0]);
         let images_label = text("Images:");
         let images = scrollable(
             column(
@@ -169,16 +167,16 @@ impl Sandbox for App {
                     })
                     .collect(),
             )
-                .width(Length::Fill),
+            .width(Length::Fill),
         )
-            .height(200);
+        .height(Length::Fill);
         let buttons = row![
             button(text("Fresh Images")).on_press(Message::FreshImages),
             button(text("Remove Images")).on_press(Message::RemoveImages),
         ]
-            .spacing(20)
-            .width(Length::Fill)
-            .padding([10, 0, 0, 0]);
+        .spacing(20)
+        .width(Length::Fill)
+        .padding([10, 0, 0, 0]);
 
         column![
             file_path_label,
@@ -189,10 +187,10 @@ impl Sandbox for App {
             images,
             buttons,
         ]
-            .padding(10)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        .padding(10)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }
 
@@ -206,8 +204,11 @@ impl App {
         let file = std::fs::read_to_string(md_path).unwrap();
         let mut images = vec![];
         let md_format = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
-        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'\s>]+)[^>]*>"#).unwrap();
-        for cap in md_format.captures_iter(&file).chain(html_format.captures_iter(&file)) {
+        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'>]+)[^>]*>"#).unwrap();
+        for cap in md_format
+            .captures_iter(&file)
+            .chain(html_format.captures_iter(&file))
+        {
             let absolute_path = Path::new(md_path)
                 .parent()
                 .unwrap()
@@ -272,12 +273,12 @@ mod tests {
     #[test]
     fn test_regex_images() {
         let md_format = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
-        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'\s>]+)[^>]*>"#).unwrap();
-        let text =
-r#"
+        let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'>]+)[^>]*>"#).unwrap();
+        let text = r#"
 # Test Regex Images
 ![image](./image.png)
 <img src="./image.png" />
+<img src="Android 应用开发.assets/image-20230523174346232.png" alt="image-20230523174346232" style="zoom: 67%;" />
 "#;
         for cap in md_format.captures_iter(text) {
             println!("{}", &cap[1]);
