@@ -1,4 +1,3 @@
-#![feature(once_cell)]
 #![windows_subsystem = "windows"]
 
 use crate::app::App;

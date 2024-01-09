@@ -1,7 +1,7 @@
 use iced::widget::{button, column, row, scrollable, text, text_input};
 use iced::{Color, Element, Length, Sandbox};
+use regex::Captures;
 use rfd::{FileDialog, MessageDialog};
-use std::collections::HashSet;
 use std::path::Path;
 
 pub struct App {
@@ -23,6 +23,8 @@ pub enum Message {
     FreshImages,
     // remove the images which are not used in the md file
     RemoveImages,
+    // rename the images with 1, 2, 3, ...
+    RenameImages,
 }
 
 impl Sandbox for App {
@@ -91,13 +93,7 @@ impl Sandbox for App {
                         .show();
                     return;
                 }
-                let remove_images_string = if remove_images.len() > 10 {
-                    remove_images[0..5].join("\n")
-                        + "\n...\n"
-                        + remove_images[remove_images.len() - 5..].join("\n").as_str()
-                } else {
-                    remove_images.join("\n")
-                };
+                let remove_images_string = Self::get_description(remove_images.clone());
                 if MessageDialog::new()
                     .set_title("Remove Images")
                     .set_description(&*format!(
@@ -123,6 +119,68 @@ impl Sandbox for App {
                         .set_buttons(rfd::MessageButtons::Ok)
                         .show();
                     self.fresh_images();
+                }
+            }
+            Message::RenameImages => {
+                // rename the images with 1.xxx, 2.xxx, 3.xxx, ...
+                // from back to front to avoid the offset change
+                // 1. remove the images which are not used in the md file
+                // 2. rename the images
+                let rename_images = self
+                    .images
+                    .iter()
+                    .filter(|image| image.used)
+                    .collect::<Vec<&Image>>();
+                if rename_images.is_empty() {
+                    MessageDialog::new()
+                        .set_title("Rename Images")
+                        .set_description("No images need to be renamed!")
+                        .set_level(rfd::MessageLevel::Info)
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .show();
+                    return;
+                }
+                let rename_images = rename_images
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, image)| (idx + 1, image))
+                    .collect::<Vec<(usize, &Image)>>();
+
+                let rename_images_str_vec = rename_images
+                    .iter()
+                    .map(|(idx, image)| {
+                        let path = Path::new(&image.abs_path);
+                        let extension = path.extension().unwrap().to_str().unwrap();
+                        let file_name = path.file_name().unwrap().to_str().unwrap();
+                        format!("{} -> {}", file_name, format!("{}.{}", idx, extension))
+                    })
+                    .collect::<Vec<String>>();
+
+                let rename_images_str = Self::get_description(rename_images_str_vec);
+
+                if MessageDialog::new()
+                    .set_title("Rename Images")
+                    .set_description(&*format!(
+                        "Are you sure to rename these {} images?\n\n{}",
+                        rename_images.len(),
+                        rename_images_str
+                    ))
+                    .set_level(rfd::MessageLevel::Warning)
+                    .set_buttons(rfd::MessageButtons::YesNo)
+                    .show()
+                {
+                    let new_file_path = self.rename_images(&rename_images);
+                    MessageDialog::new()
+                        .set_title("Rename Images")
+                        .set_description(&*format!(
+                            "Rename {} images successfully!\n\n{}\n\nNew md file save to:\n{}",
+                            rename_images.len(),
+                            rename_images_str,
+                            new_file_path
+                        ))
+                        .set_level(rfd::MessageLevel::Info)
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .show();
                 }
             }
         }
@@ -159,7 +217,7 @@ impl Sandbox for App {
                 self.images
                     .iter()
                     .map(|image| {
-                        Element::from(text(image.path.clone()).style(if image.used {
+                        Element::from(text(image.abs_path.clone()).style(if image.used {
                             Color::from_rgb(0.0, 1.0, 0.0)
                         } else {
                             Color::from_rgb(1.0, 0.0, 0.0)
@@ -173,6 +231,7 @@ impl Sandbox for App {
         let buttons = row![
             button(text("Fresh Images")).on_press(Message::FreshImages),
             button(text("Remove Images")).on_press(Message::RemoveImages),
+            button(text("Rename Images")).on_press(Message::RenameImages)
         ]
         .spacing(20)
         .width(Length::Fill)
@@ -194,32 +253,42 @@ impl Sandbox for App {
     }
 }
 
+#[derive(Debug)]
 struct Image {
-    path: String,
+    abs_path: String,
+    raw_path: Option<String>,
     used: bool,
 }
 
 impl App {
-    pub fn find_md_images(md_path: &str) -> Vec<String> {
+    // return (absolute_path, raw_path, offset)
+    fn find_md_images(md_path: &str) -> Vec<(String, String)> {
         let file = std::fs::read_to_string(md_path).unwrap();
         let mut images = vec![];
         let md_format = regex::Regex::new(r"!\[.*?\]\((.*?)\)").unwrap();
         let html_format = regex::Regex::new(r#"<img[^>]*?src\s*=\s*["']?([^"'>]+)[^>]*>"#).unwrap();
+
         for cap in md_format
             .captures_iter(&file)
             .chain(html_format.captures_iter(&file))
+            .collect::<Vec<Captures>>()
         {
+            let match_str = cap.get(1).unwrap();
             let absolute_path = Path::new(md_path)
                 .parent()
                 .unwrap()
                 .join(cap[1].to_string().replace("/", "\\"));
-            images.push(absolute_path.to_str().unwrap().to_string());
+            images.push((
+                absolute_path.to_str().unwrap().to_string(),
+                match_str.as_str().to_string(),
+            ));
         }
 
         images
     }
 
-    pub fn find_dir_images(dir_path: &str) -> Vec<String> {
+    // return absolute_path
+    fn find_dir_images(dir_path: &str) -> Vec<String> {
         let mut images = vec![];
         let dir = std::fs::read_dir(dir_path).unwrap();
         for entry in dir {
@@ -228,13 +297,18 @@ impl App {
             if path.is_dir() {
                 images.append(&mut Self::find_dir_images(path.to_str().unwrap()));
             } else {
+                // check if the file is a image
+                let extension = path.extension().unwrap().to_str().unwrap().to_lowercase();
+                if !["png", "jpg", "jpeg", "gif", "webp"].contains(&extension.as_str()) {
+                    continue;
+                }
                 images.push(path.to_str().unwrap().to_string());
             }
         }
         images
     }
 
-    pub fn fresh_images(&mut self) {
+    fn fresh_images(&mut self) {
         let dir_images = if self.image_dir_path.is_some() {
             Self::find_dir_images(self.image_dir_path.as_ref().unwrap())
         } else {
@@ -242,29 +316,80 @@ impl App {
         };
         let md_images = if self.md_file_path.is_some() {
             Self::find_md_images(self.md_file_path.as_ref().unwrap())
-                .into_iter()
-                .collect::<HashSet<_>>()
         } else {
-            HashSet::new()
+            vec![]
         };
+        let md_images_map = md_images
+            .iter()
+            .map(|(abs_path, raw_path)| (abs_path, raw_path))
+            .collect::<std::collections::HashMap<&String, &String>>();
         let mut images = vec![];
         for image in dir_images {
             images.push(Image {
-                used: md_images.contains(&image),
-                path: image,
+                used: md_images_map.contains_key(&image),
+                abs_path: image.clone(),
+                raw_path: md_images_map.get(&image).map(|s| s.to_string()),
             });
         }
         self.images = images;
     }
 
-    pub fn find_remove_images(&mut self) -> Vec<String> {
+    fn find_remove_images(&mut self) -> Vec<String> {
         let mut images = vec![];
         for image in &self.images {
             if !image.used {
-                images.push(image.path.clone());
+                images.push(image.abs_path.clone());
             }
         }
         images
+    }
+
+    fn get_description(content: Vec<String>) -> String {
+        if content.len() > 10 {
+            content[0..5].join("\n") + "\n...\n" + content[content.len() - 5..].join("\n").as_str()
+        } else {
+            content.join("\n")
+        }
+    }
+
+    fn rename_images(&self, images: &Vec<(usize, &Image)>) -> String {
+        let md_file_path = self.md_file_path.as_ref().unwrap();
+        let mut md_file_content = std::fs::read_to_string(md_file_path).unwrap();
+        for (idx, image) in images.iter().rev() {
+            let path = Path::new(&image.abs_path);
+            let extension = path.extension().unwrap().to_str().unwrap();
+            let raw_file_name = path.file_name().unwrap().to_str().unwrap();
+            let new_file_name = format!("{}.{}", idx, extension);
+            let new_path = path.parent().unwrap().join(&new_file_name);
+            let new_raw_path = image
+                .raw_path
+                .as_ref()
+                .unwrap()
+                .replace(raw_file_name, &new_file_name);
+            std::fs::copy(path, new_path).unwrap();
+            md_file_content =
+                md_file_content.replace(image.raw_path.as_ref().unwrap(), &new_raw_path);
+        }
+
+        // write to a new file like xx_new.md
+        let new_md_file_path = Path::new(md_file_path);
+        let file_name = new_md_file_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .split(".")
+            .collect::<Vec<&str>>()[0]
+            .to_string();
+        let new_md_file_path = new_md_file_path
+            .parent()
+            .unwrap()
+            .join(format!("{}_new.md", file_name))
+            .to_str()
+            .unwrap()
+            .to_string();
+        std::fs::write(&new_md_file_path, md_file_content).unwrap();
+        new_md_file_path
     }
 }
 
@@ -278,7 +403,7 @@ mod tests {
 # Test Regex Images
 ![image](./image.png)
 <img src="./image.png" />
-<img src="Android 应用开发.assets/image-20230523174346232.png" alt="image-20230523174346232" style="zoom: 67%;" />
+<img src="Android XXXX.assets/image-20230523174346232.png" alt="image-20230523174346232" style="zoom: 67%;" />
 "#;
         for cap in md_format.captures_iter(text) {
             println!("{}", &cap[1]);
