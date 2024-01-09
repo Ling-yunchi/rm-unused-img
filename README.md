@@ -15,6 +15,9 @@ it is useful when you use Editor like Typora and set auto copy image to a direct
 3. if auto check failed, or you want to check other directory, you can input the directory manually.
 4. then the images in the directory will be listed. green is used, red is unused.
 5. click remove button to remove unused images.
+6. click refresh button to refresh the list.
+7. click rename button to rename the image.
+   - rename the images with 1.xxx, 2.xxx, 3.xxx, ...
 
 ## Preview
 
